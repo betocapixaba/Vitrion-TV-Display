@@ -26,9 +26,8 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
   const [mediaError, setMediaError] = useState<boolean>(false);
 
-  // Fonte resolvida (local blob URL prioritária ou URL remota de fallback)
-  const [activeMediaSrc, setActiveMediaSrc] = useState<string>(currentItem?.url || '');
-  const [isUsingLocalCache, setIsUsingLocalCache] = useState<boolean>(false);
+  // Fonte resolvida do item atual (local blob URL prioritária ou URL remota direta)
+  const [cachedBlob, setCachedBlob] = useState<{ itemId: string; blobUrl: string } | null>(null);
   const activeBlobUrlRef = useRef<string | null>(null);
 
   // Keep latest callback references in refs to prevent useEffect dependency churn
@@ -60,21 +59,18 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
             mediaCacheService.revokeBlobUrl(activeBlobUrlRef.current);
           }
           activeBlobUrlRef.current = blobUrl;
-          setActiveMediaSrc(blobUrl);
-          setIsUsingLocalCache(true);
+          setCachedBlob({ itemId: currentItem.id, blobUrl });
         } else {
           // Sem blob em cache: usa URL remota e libera blob anterior se houver
           if (activeBlobUrlRef.current) {
             mediaCacheService.revokeBlobUrl(activeBlobUrlRef.current);
             activeBlobUrlRef.current = null;
           }
-          setActiveMediaSrc(currentItem.url);
-          setIsUsingLocalCache(false);
+          setCachedBlob(null);
         }
       } catch (err) {
         if (isMounted) {
-          setActiveMediaSrc(currentItem.url);
-          setIsUsingLocalCache(false);
+          setCachedBlob(null);
         }
       }
     };
@@ -128,6 +124,10 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
     return () => clearInterval(interval);
   }, [clockFormat]);
 
+  const isUsingLocalCache = cachedBlob?.itemId === currentItem?.id;
+  const currentMediaSrc = isUsingLocalCache && cachedBlob ? cachedBlob.blobUrl : (currentItem?.url || '');
+  const mediaSource = mediaError && currentItem?.fallbackUrl ? currentItem.fallbackUrl : currentMediaSrc;
+
   // Handle Video Autoplay and Loop control safely
   useEffect(() => {
     setMediaError(false);
@@ -162,7 +162,7 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
         fallbackTimerRef.current = null;
       }
     };
-  }, [currentItemId, currentItem?.type, activeMediaSrc]);
+  }, [currentItemId, currentItem?.type, currentMediaSrc]);
 
   if (!currentItem) {
     return (
@@ -181,7 +181,7 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
     if (hasHandledErrorRef.current === currentItem.id) return;
     hasHandledErrorRef.current = currentItem.id;
     setMediaError(true);
-    onItemErrorRef.current(currentItem.id, `Erro ao carregar imagem: ${activeMediaSrc || currentItem.url}`);
+    onItemErrorRef.current(currentItem.id, `Erro ao carregar imagem: ${currentMediaSrc || currentItem.url}`);
     
     // Auto-advance quickly to prevent black screen
     fallbackTimerRef.current = window.setTimeout(() => {
@@ -193,14 +193,12 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
     if (hasHandledErrorRef.current === currentItem.id) return;
     hasHandledErrorRef.current = currentItem.id;
     setMediaError(true);
-    onItemErrorRef.current(currentItem.id, `Erro no stream do vídeo: ${activeMediaSrc || currentItem.url}`);
+    onItemErrorRef.current(currentItem.id, `Erro no stream do vídeo: ${currentMediaSrc || currentItem.url}`);
     
     fallbackTimerRef.current = window.setTimeout(() => {
       onItemEndedRef.current();
     }, 1500);
   };
-
-  const mediaSource = mediaError && currentItem.fallbackUrl ? currentItem.fallbackUrl : (activeMediaSrc || currentItem.url);
 
   return (
     <div className="relative w-full h-full bg-black overflow-hidden select-none">

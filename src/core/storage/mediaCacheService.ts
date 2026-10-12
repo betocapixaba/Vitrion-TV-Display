@@ -308,17 +308,15 @@ class MediaCacheService {
       return false;
     }
 
-    try {
-      // Cria controller com timeout de 30 segundos (evita travar a fila em conexões instáveis)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+    // Cria controller com timeout de 30 segundos (evita travar a fila em conexões instáveis)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
+    try {
       const response = await fetch(item.url, {
         method: 'GET',
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       // Validação de resposta HTTP
       if (!response.ok) {
@@ -361,9 +359,11 @@ class MediaCacheService {
       } else {
         // Erro de rede ou CORS
         this.lastError = `Falha de rede/CORS ao baixar ${item.name || item.id}: ${err.message || String(err)}`;
-        console.warn('[Vitrion MediaCache] Erro de rede/CORS no download:', item.url, err);
+        console.warn('[Vitrion MediaCache] Erro de rede/CORS no download:', item.url, err?.message || String(err));
       }
       return false;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

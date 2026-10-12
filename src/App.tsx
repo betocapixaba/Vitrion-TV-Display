@@ -409,7 +409,13 @@ export default function App() {
   const nextItem = activeItems[(currentIndex + 1) % activeItems.length] || null;
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black text-white">
+    <div
+      className={
+        !device.isActivated
+          ? 'relative w-full min-h-screen overflow-y-auto bg-[#07090e] text-white'
+          : 'relative w-screen h-screen overflow-hidden bg-black text-white'
+      }
+    >
       {/* If TV is not yet paired/activated, show the TV activation interface */}
       {!device.isActivated ? (
         <ActivationScreen

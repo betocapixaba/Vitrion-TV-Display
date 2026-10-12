@@ -84,13 +84,44 @@ class StandbySyncAdapter implements IRemoteSyncAdapter {
   }
 
   public async activateDevice(deviceId: string, pairingCode: string, deviceName?: string): Promise<boolean> {
-    const profile = await idbService.getConfig<DisplayDevice>('device_profile');
+    let profile = await idbService.getConfig<DisplayDevice>('device_profile');
+    if (!profile) {
+      try {
+        const storedId = localStorage.getItem('vitrion_tv_device_id') || deviceId;
+        const storedCode = localStorage.getItem('vitrion_tv_pairing_code') || pairingCode;
+        profile = {
+          id: storedId,
+          pairingCode: storedCode,
+          name: deviceName || 'TV Salão Principal',
+          isActivated: true,
+          registeredAt: new Date().toISOString(),
+          lastHeartbeat: new Date().toISOString(),
+          platform: 'firetv',
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          resolution: {
+            width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+            height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+            pixelRatio: typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1,
+          },
+          orientation: typeof window !== 'undefined' && window.innerWidth < window.innerHeight ? 'portrait' : 'landscape',
+        };
+      } catch {
+        // ignore
+      }
+    }
+
     if (profile) {
       profile.isActivated = true;
       if (deviceName) {
         profile.name = deviceName;
       }
       await idbService.setConfig('device_profile', profile);
+      try {
+        localStorage.setItem('vitrion_tv_device_id', profile.id);
+        localStorage.setItem('vitrion_tv_pairing_code', profile.pairingCode);
+      } catch {
+        // ignore
+      }
       await idbService.logTelemetry({
         type: 'activation',
         message: `Dispositivo ${deviceId} ativado com sucesso via código ${pairingCode}`,
