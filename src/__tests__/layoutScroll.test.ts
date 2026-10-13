@@ -42,8 +42,8 @@ describe('Vitrion TV Display — Responsive Layout & Vertical Scroll Verificatio
       })
     );
 
-    // O container raiz da tela de ativação deve ter min-h-screen para permitir expansão e rolagem vertical
-    expect(html).toContain('min-h-screen');
+    // O container raiz da tela de ativação deve ter min-h-full para expandir dentro do scroll container pai (h-screen overflow-y-auto)
+    expect(html).toContain('min-h-full');
 
     // Não deve possuir overflow-hidden no container principal que corte os botões ou o rodapé
     expect(html).not.toMatch(/class="[^"]*h-screen[^"]*overflow-hidden/);
@@ -97,7 +97,7 @@ describe('Vitrion TV Display — Responsive Layout & Vertical Scroll Verificatio
 
     // Deve checar que o ternário existe para diferenciar a tela de ativação da tela de reprodução
     expect(appTsx).toContain('!device.isActivated');
-    expect(appTsx).toContain('overflow-y-auto');
-    expect(appTsx).toContain('relative w-screen h-screen overflow-hidden bg-black text-white');
+    expect(appTsx).toContain("'relative w-full h-screen overflow-y-auto bg-[#07090e] text-white'");
+    expect(appTsx).toContain("'relative w-screen h-screen overflow-hidden bg-black text-white'");
   });
 });

@@ -30,7 +30,7 @@ export const ActivationScreen: React.FC<ActivationScreenProps> = ({
   };
 
   return (
-    <div className="relative w-full min-h-screen bg-[#07090e] text-slate-100 flex flex-col justify-between p-8 sm:p-14 select-none font-sans">
+    <div className="relative w-full min-h-full bg-[#07090e] text-slate-100 flex flex-col justify-between p-8 sm:p-14 select-none font-sans">
       {/* Background glow ambiance */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-sky-500/10 rounded-full blur-[140px] pointer-events-none" />
 

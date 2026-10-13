@@ -412,7 +412,7 @@ export default function App() {
     <div
       className={
         !device.isActivated
-          ? 'relative w-full min-h-screen overflow-y-auto bg-[#07090e] text-white'
+          ? 'relative w-full h-screen overflow-y-auto bg-[#07090e] text-white'
           : 'relative w-screen h-screen overflow-hidden bg-black text-white'
       }
     >
