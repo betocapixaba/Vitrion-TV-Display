@@ -38,6 +38,7 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
 
   const currentItemId = currentItem?.id;
   const hasHandledErrorRef = useRef<string | null>(null);
+  const hasEndedRef = useRef<boolean>(false);
   const fallbackTimerRef = useRef<number | null>(null);
 
   // Resolução da fonte de reprodução (Local Blob vs Remoto) e gestão de memória
@@ -132,6 +133,7 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
   useEffect(() => {
     setMediaError(false);
     hasHandledErrorRef.current = null;
+    hasEndedRef.current = false;
     if (fallbackTimerRef.current) {
       window.clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
@@ -147,10 +149,17 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
           console.warn('[Vitrion Video] Autoplay restricted or interrupted:', err);
-          // Only notify once per item
-          if (hasHandledErrorRef.current !== currentItemId) {
+          // Only notify once per item and advance after fallback so screen does not stay frozen
+          if (hasHandledErrorRef.current !== currentItemId && !hasEndedRef.current) {
             hasHandledErrorRef.current = currentItemId || 'unknown';
             onItemErrorRef.current(currentItemId || 'unknown', 'Autoplay bloqueado pelo navegador');
+
+            fallbackTimerRef.current = window.setTimeout(() => {
+              if (!hasEndedRef.current) {
+                hasEndedRef.current = true;
+                onItemEndedRef.current();
+              }
+            }, 3000);
           }
         });
       }
@@ -174,12 +183,15 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
   }
 
   const handleVideoEnded = () => {
+    if (hasEndedRef.current) return;
+    hasEndedRef.current = true;
     onItemEndedRef.current();
   };
 
   const handleImageError = () => {
-    if (hasHandledErrorRef.current === currentItem.id) return;
+    if (hasHandledErrorRef.current === currentItem.id || hasEndedRef.current) return;
     hasHandledErrorRef.current = currentItem.id;
+    hasEndedRef.current = true;
     setMediaError(true);
     onItemErrorRef.current(currentItem.id, `Erro ao carregar imagem: ${currentMediaSrc || currentItem.url}`);
     
@@ -190,8 +202,9 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
   };
 
   const handleVideoError = () => {
-    if (hasHandledErrorRef.current === currentItem.id) return;
+    if (hasHandledErrorRef.current === currentItem.id || hasEndedRef.current) return;
     hasHandledErrorRef.current = currentItem.id;
+    hasEndedRef.current = true;
     setMediaError(true);
     onItemErrorRef.current(currentItem.id, `Erro no stream do vídeo: ${currentMediaSrc || currentItem.url}`);
     

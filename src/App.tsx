@@ -25,8 +25,22 @@ import { ActivationScreen } from './components/activation/ActivationScreen';
 import { DisplayScreen } from './components/player/DisplayScreen';
 import { DiagnosticOverlay } from './components/hud/DiagnosticOverlay';
 import { StatusBar } from './components/hud/StatusBar';
+import { AdminPlaceholder } from './components/admin/AdminPlaceholder';
+import { AdminDashboard } from './components/admin/AdminDashboard';
+
+/**
+ * Checks if the given URL hash corresponds to the administrative area.
+ */
+export function isAdminRoute(hash: string): boolean {
+  return hash === '#/admin' || hash.startsWith('#/admin/') || hash.startsWith('#/admin?');
+}
 
 export default function App() {
+  const [currentHash, setCurrentHash] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return window.location.hash || '';
+  });
+
   const [device, setDevice] = useState<DisplayDevice | null>(null);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [activeItems, setActiveItems] = useState<PlaylistItem[]>([]);
@@ -36,6 +50,17 @@ export default function App() {
   const [isRealOnline, setIsRealOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
+
+  // Sync hash routing on window hashchange
+  useEffect(() => {
+    const handleHashChange = () => {
+      setCurrentHash(window.location.hash || '');
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const isAdmin = isAdminRoute(currentHash);
 
   const [telemetry, setTelemetry] = useState<TelemetryState>({
     isOnline: true,
@@ -52,6 +77,7 @@ export default function App() {
   });
 
   const timerRef = useRef<number | null>(null);
+  const lastAdvanceTimeRef = useRef<number>(0);
   const isOnlineComputed = !isSimulatedOffline && isRealOnline;
 
   // Ref para controle de persistência de estado (evita gravações redundantes ou loops)
@@ -75,6 +101,11 @@ export default function App() {
 
   // 1. Initial Device Boot & Storage Hydration
   useEffect(() => {
+    // If administrative route is active, do not run TV side-effects or boot logic
+    if (isAdmin) {
+      return;
+    }
+
     // Acquire TV wake lock
     requestScreenWakeLock();
     const cleanupCursor = initCursorAutoHider();
@@ -160,10 +191,17 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [isAdmin]);
 
-  // 2. Playback Item Advance Logic (Pure index increment)
+  // 2. Playback Item Advance Logic (Pure index increment with duplicate event debouncing)
   const advanceToNextItem = useCallback(() => {
+    const now = Date.now();
+    // Guard against duplicate rapid advancement within 400ms (duplicate video ended/error events or remote bounce)
+    if (now - lastAdvanceTimeRef.current < 400) {
+      return;
+    }
+    lastAdvanceTimeRef.current = now;
+
     setCurrentIndex((prevIndex) => {
       const items = stateRef.current.activeItems;
       if (items.length === 0) return 0;
@@ -173,7 +211,7 @@ export default function App() {
 
   // 2b. Sync Telemetry, Save Player State & Preload Buffer on Item Change
   useEffect(() => {
-    if (activeItems.length === 0 || !playlist) return;
+    if (isAdmin || activeItems.length === 0 || !playlist) return;
     const cur = activeItems[currentIndex];
     if (!cur) return;
 
@@ -240,11 +278,11 @@ export default function App() {
       }
       mediaCacheService.reprioritize(allPlaylistItems, playlistIndex);
     }
-  }, [currentIndex, activeItems, playlist, device?.isActivated]);
+  }, [currentIndex, activeItems, playlist, device?.isActivated, isAdmin]);
 
   // 3. Playback Timer Controller
   useEffect(() => {
-    if (!device?.isActivated || activeItems.length === 0) return;
+    if (isAdmin || !device?.isActivated || activeItems.length === 0) return;
 
     const currentItem = activeItems[currentIndex];
     if (!currentItem) return;
@@ -255,7 +293,18 @@ export default function App() {
       timerRef.current = null;
     }
 
-    // Advance automatically based on item duration
+    // Videos are driven by native playback events (onEnded / onError) in DisplayScreen
+    // to prevent cutting off videos whose duration exceeds configured durationSeconds.
+    if (currentItem.type === 'video') {
+      return () => {
+        if (timerRef.current) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      };
+    }
+
+    // Advance images and non-video items automatically based on item duration (default 10s)
     const durationMs = (currentItem.durationSeconds || 10) * 1000;
 
     timerRef.current = window.setTimeout(() => {
@@ -265,12 +314,15 @@ export default function App() {
     return () => {
       if (timerRef.current) {
         window.clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
     };
-  }, [device?.isActivated, activeItems, currentIndex, advanceToNextItem]);
+  }, [device?.isActivated, activeItems, currentIndex, advanceToNextItem, isAdmin]);
 
   // 4. Remote Control & D-pad Keyboard Navigation
   useEffect(() => {
+    if (isAdmin) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Menu / Info key on TV remotes or 'm' on keyboard
       if (e.key === 'm' || e.key === 'M' || e.key === 'ContextMenu') {
@@ -288,10 +340,12 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDiagnosticOpen, advanceToNextItem]);
+  }, [isDiagnosticOpen, advanceToNextItem, isAdmin]);
 
   // 5. Uptime & Heartbeat Periodic Loop (Decoupled, zero state thrashing)
   useEffect(() => {
+    if (isAdmin) return;
+
     let uptimeTicks = 0;
 
     const interval = window.setInterval(() => {
@@ -338,7 +392,7 @@ export default function App() {
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, []);
+  }, [isAdmin]);
 
   // 6. Action Handlers
   const handleActivate = async (customName?: string) => {
@@ -394,6 +448,21 @@ export default function App() {
       };
     });
   }, []);
+
+  // Isolated Administrative Entry Point & Dashboard UI Foundation (Phase A1 & Phase B)
+  if (isAdmin) {
+    return (
+      <AdminDashboard
+        currentHash={currentHash}
+        onNavigateToTv={() => {
+          if (typeof window !== 'undefined') {
+            window.location.hash = '';
+          }
+          setCurrentHash('');
+        }}
+      />
+    );
+  }
 
   if (!device) {
     return (
