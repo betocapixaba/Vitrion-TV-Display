@@ -40,10 +40,10 @@ export function getActivePlaylistItems(playlist: Playlist): PlaylistItem[] {
 
   const active = playlist.items.filter((item) => isItemActiveNow(item.schedule));
 
-  // Critical failover: if all scheduled items are currently outside the time window,
-  // do NOT show a black or white screen! Fallback to all items in the playlist.
+  // Nenhum item está programado para o momento: o Player deve entrar em standby,
+  // sem exibir conteúdo fora da janela horária aprovada.
   if (active.length === 0) {
-    return playlist.items;
+    return [];
   }
 
   return active.sort((a, b) => a.order - b.order);
@@ -77,11 +77,11 @@ export function resolveInitialPlaybackState(
 
   if (activeItems.length === 0) {
     return {
-      activeItems: DEFAULT_OFFLINE_PLAYLIST.items,
+      activeItems: [],
       initialIndex: 0,
       recoveredItem: null,
       isRecovered: false,
-      reason: 'Playlist não possui itens; utilizando fallback padrão de segurança.',
+      reason: 'Nenhum item está ativo no horário atual; Player em standby até a próxima janela programada.',
     };
   }
 
