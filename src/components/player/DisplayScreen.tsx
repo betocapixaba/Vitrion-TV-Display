@@ -33,6 +33,7 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
   // Fonte resolvida do item atual (local blob URL prioritária ou URL remota direta)
   const [cachedBlob, setCachedBlob] = useState<{ itemId: string; blobUrl: string } | null>(null);
   const activeBlobUrlRef = useRef<string | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
 
   // Keep latest callback references in refs to prevent useEffect dependency churn
   const onItemEndedRef = useRef(onItemEnded);
@@ -215,8 +216,22 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
     if (isUsingLocalCache || !currentItem) return false;
 
     try {
-      const blobUrl = await mediaCacheService.createBlobUrl(currentItem.id);
-      if (!blobUrl) return false;
+      const video = videoRef.current;
+      if (video && Number.isFinite(video.currentTime) && video.currentTime > 0) {
+        pendingSeekRef.current = video.currentTime;
+      }
+
+      const itemIdAtRequest = currentItem.id;
+      const blobUrl = await mediaCacheService.createBlobUrl(itemIdAtRequest);
+      if (!blobUrl) {
+        pendingSeekRef.current = null;
+        return false;
+      }
+      if (currentItemId !== itemIdAtRequest) {
+        mediaCacheService.revokeBlobUrl(blobUrl);
+        pendingSeekRef.current = null;
+        return false;
+      }
 
       if (activeBlobUrlRef.current && activeBlobUrlRef.current !== blobUrl) {
         mediaCacheService.revokeBlobUrl(activeBlobUrlRef.current);
@@ -277,11 +292,19 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
             onError={handleVideoError}
             onLoadedMetadata={(event) => {
               const video = event.currentTarget;
-              const resumeSeconds = Math.max(0, initialPlaybackPositionSeconds || 0);
+              const pendingSeek = pendingSeekRef.current;
+              const resumeSeconds = pendingSeek !== null
+                ? pendingSeek
+                : Math.max(0, initialPlaybackPositionSeconds || 0);
               if (resumeSeconds > 0) {
                 const maxSafePosition = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.5) : resumeSeconds;
-                video.currentTime = Math.min(resumeSeconds, maxSafePosition);
+                try {
+                  video.currentTime = Math.min(resumeSeconds, maxSafePosition);
+                } catch {
+                  // Some streams do not allow seeking until metadata is fully available.
+                }
               }
+              if (pendingSeek !== null) pendingSeekRef.current = null;
             }}
             onTimeUpdate={(event) => onPlaybackProgress?.(currentItem.id, event.currentTarget.currentTime)}
             className={`w-full h-full object-${currentItem.fitMode || 'cover'} bg-black`}
