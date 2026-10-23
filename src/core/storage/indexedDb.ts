@@ -375,7 +375,8 @@ class IndexedDbService {
         req.onerror = () => reject(req.error);
       });
     } catch (e) {
-      console.warn('[Vitrion IDB] Media cache skipped for:', id, e);
+      console.warn('[Vitrion IDB] Media cache write failed for:', id, e);
+      throw e;
     }
   }
 
