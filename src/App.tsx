@@ -84,6 +84,7 @@ export default function App() {
   // Ref para controle de persistência de estado (evita gravações redundantes ou loops)
   const lastSavedStateRef = useRef<{ playlistId: string; itemId: string; index: number } | null>(null);
   const lastProgressPersistRef = useRef<{ itemId: string; savedAt: number }>({ itemId: '', savedAt: 0 });
+  const playbackStartRef = useRef<{ playlistId: string; itemId: string; startedAt: string } | null>(null);
 
   // Track latest reactive values in ref to avoid re-creating intervals or loops
   const stateRef = useRef({
@@ -236,7 +237,9 @@ export default function App() {
       activePlaylistId: snapshot.playlist.id,
       currentItemIndex: snapshot.currentIndex,
       currentMediaId: current.id,
-      playbackStartedAt: now,
+      playbackStartedAt: playbackStartRef.current?.playlistId === snapshot.playlist.id && playbackStartRef.current?.itemId === current.id
+        ? playbackStartRef.current.startedAt
+        : now,
       savedAt: now,
       playlistVersion: snapshot.playlist.version,
       playbackPositionSeconds: Math.floor(seconds),
@@ -274,6 +277,8 @@ export default function App() {
         lastSavedStateRef.current?.playlistId !== playlist.id)
     ) {
       const now = new Date().toISOString();
+      playbackStartRef.current = { playlistId: playlist.id, itemId: cur.id, startedAt: now };
+      lastProgressPersistRef.current = { itemId: cur.id, savedAt: 0 };
       lastSavedStateRef.current = {
         playlistId: playlist.id,
         itemId: cur.id,
