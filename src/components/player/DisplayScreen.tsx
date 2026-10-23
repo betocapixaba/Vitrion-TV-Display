@@ -209,26 +209,53 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
     onItemEndedRef.current();
   };
 
-  const handleImageError = () => {
+  // If the remote source fails (for example, when connectivity drops), try the
+  // already-cached asset before reporting failure or advancing the playlist.
+  const switchToCachedMedia = async (): Promise<boolean> => {
+    if (isUsingLocalCache || !currentItem) return false;
+
+    try {
+      const blobUrl = await mediaCacheService.createBlobUrl(currentItem.id);
+      if (!blobUrl) return false;
+
+      if (activeBlobUrlRef.current && activeBlobUrlRef.current !== blobUrl) {
+        mediaCacheService.revokeBlobUrl(activeBlobUrlRef.current);
+      }
+      activeBlobUrlRef.current = blobUrl;
+      hasHandledErrorRef.current = null;
+      hasEndedRef.current = false;
+      setMediaError(false);
+      setCachedBlob({ itemId: currentItem.id, blobUrl });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleImageError = async () => {
     if (hasHandledErrorRef.current === currentItem.id || hasEndedRef.current) return;
+    if (await switchToCachedMedia()) return;
+
     hasHandledErrorRef.current = currentItem.id;
     hasEndedRef.current = true;
     setMediaError(true);
     onItemErrorRef.current(currentItem.id, `Erro ao carregar imagem: ${currentMediaSrc || currentItem.url}`);
-    
-    // Auto-advance quickly to prevent black screen
+
+    // Auto-advance only after a cached retry has failed.
     fallbackTimerRef.current = window.setTimeout(() => {
       onItemEndedRef.current();
     }, 1500);
   };
 
-  const handleVideoError = () => {
+  const handleVideoError = async () => {
     if (hasHandledErrorRef.current === currentItem.id || hasEndedRef.current) return;
+    if (await switchToCachedMedia()) return;
+
     hasHandledErrorRef.current = currentItem.id;
     hasEndedRef.current = true;
     setMediaError(true);
     onItemErrorRef.current(currentItem.id, `Erro no stream do vídeo: ${currentMediaSrc || currentItem.url}`);
-    
+
     fallbackTimerRef.current = window.setTimeout(() => {
       onItemEndedRef.current();
     }, 1500);
