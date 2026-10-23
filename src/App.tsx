@@ -45,6 +45,7 @@ export default function App() {
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [activeItems, setActiveItems] = useState<PlaylistItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [resumePosition, setResumePosition] = useState<{ itemId: string; seconds: number } | null>(null);
   const [isDiagnosticOpen, setIsDiagnosticOpen] = useState<boolean>(false);
   const [isSimulatedOffline, setIsSimulatedOffline] = useState<boolean>(false);
   const [isRealOnline, setIsRealOnline] = useState<boolean>(
@@ -82,6 +83,7 @@ export default function App() {
 
   // Ref para controle de persistência de estado (evita gravações redundantes ou loops)
   const lastSavedStateRef = useRef<{ playlistId: string; itemId: string; index: number } | null>(null);
+  const lastProgressPersistRef = useRef<{ itemId: string; savedAt: number }>({ itemId: '', savedAt: 0 });
 
   // Track latest reactive values in ref to avoid re-creating intervals or loops
   const stateRef = useRef({
@@ -150,6 +152,12 @@ export default function App() {
         const resolution = resolveInitialPlaybackState(loadedPlaylist, savedPlayerState);
         setActiveItems(resolution.activeItems);
         setCurrentIndex(resolution.initialIndex);
+        setResumePosition(
+          resolution.isRecovered && resolution.recoveredItem?.type === 'video' &&
+          (savedPlayerState?.playbackPositionSeconds || 0) > 0
+            ? { itemId: resolution.recoveredItem.id, seconds: savedPlayerState!.playbackPositionSeconds! }
+            : null
+        );
 
         // Preload do item inicial resolvido
         if (resolution.activeItems.length > 0 && resolution.activeItems[resolution.initialIndex]) {
@@ -178,6 +186,7 @@ export default function App() {
         const fallbackItems = getActivePlaylistItems(fallbackPlaylist);
         setActiveItems(fallbackItems);
         setCurrentIndex(0);
+        setResumePosition(null);
         mediaCacheService.syncPlaylist(fallbackPlaylist.items, 0);
       }
     };
@@ -202,10 +211,38 @@ export default function App() {
     }
     lastAdvanceTimeRef.current = now;
 
+    setResumePosition(null);
     setCurrentIndex((prevIndex) => {
       const items = stateRef.current.activeItems;
       if (items.length === 0) return 0;
       return (prevIndex + 1) % items.length;
+    });
+  }, []);
+
+  // Persist video playback progress periodically so recovery can resume near the last position.
+  const handlePlaybackProgress = useCallback((itemId: string, seconds: number) => {
+    const snapshot = stateRef.current;
+    const current = snapshot.activeItems[snapshot.currentIndex];
+    if (!snapshot.device?.isActivated || !snapshot.playlist || !current || current.id !== itemId || current.type !== 'video') return;
+    if (!Number.isFinite(seconds) || seconds < 0) return;
+
+    const nowMs = Date.now();
+    if (lastProgressPersistRef.current.itemId === itemId && nowMs - lastProgressPersistRef.current.savedAt < 5000) return;
+    lastProgressPersistRef.current = { itemId, savedAt: nowMs };
+
+    const now = new Date().toISOString();
+    const stateToPersist: PlayerState = {
+      schemaVersion: CURRENT_PLAYER_STATE_SCHEMA_VERSION,
+      activePlaylistId: snapshot.playlist.id,
+      currentItemIndex: snapshot.currentIndex,
+      currentMediaId: current.id,
+      playbackStartedAt: now,
+      savedAt: now,
+      playlistVersion: snapshot.playlist.version,
+      playbackPositionSeconds: Math.floor(seconds),
+    };
+    idbService.savePlayerState(stateToPersist).catch((err) => {
+      console.warn('[Vitrion App] Falha não impeditiva ao salvar posição do vídeo:', err);
     });
   }, []);
 
@@ -435,6 +472,12 @@ export default function App() {
     const resolution = resolveInitialPlaybackState(reloadedPlaylist, savedState);
     setActiveItems(resolution.activeItems);
     setCurrentIndex(resolution.initialIndex);
+    setResumePosition(
+      resolution.isRecovered && resolution.recoveredItem?.type === 'video' &&
+      (savedState?.playbackPositionSeconds || 0) > 0
+        ? { itemId: resolution.recoveredItem.id, seconds: savedState!.playbackPositionSeconds! }
+        : null
+    );
   };
 
   const handleItemError = useCallback((itemId: string, errorMsg: string) => {
@@ -505,6 +548,8 @@ export default function App() {
             clockFormat="24h"
             onItemEnded={advanceToNextItem}
             onItemError={handleItemError}
+            initialPlaybackPositionSeconds={resumePosition?.itemId === currentItem?.id ? resumePosition.seconds : 0}
+            onPlaybackProgress={handlePlaybackProgress}
           />
 
           <StatusBar
