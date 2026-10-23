@@ -323,20 +323,19 @@ export default function App() {
 
     const refreshSchedule = () => {
       const scheduledItems = getActivePlaylistItems(playlist);
-      setActiveItems((current) => {
-        const sameItems = current.length === scheduledItems.length &&
-          current.every((item, index) => item.id === scheduledItems[index]?.id);
-        if (sameItems) return current;
-        setCurrentIndex(0);
-        setResumePosition(null);
-        return scheduledItems;
-      });
+      const sameItems = activeItems.length === scheduledItems.length &&
+        activeItems.every((item, index) => item.id === scheduledItems[index]?.id);
+      if (sameItems) return;
+
+      setActiveItems(scheduledItems);
+      setCurrentIndex(0);
+      setResumePosition(null);
     };
 
     refreshSchedule();
     const interval = window.setInterval(refreshSchedule, 30000);
     return () => window.clearInterval(interval);
-  }, [playlist, device?.isActivated, isAdmin]);
+  }, [playlist, activeItems, device?.isActivated, isAdmin]);
 
   // 3. Playback Timer Controller
   useEffect(() => {
