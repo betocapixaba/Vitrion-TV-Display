@@ -179,9 +179,26 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
 
   if (!currentItem) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-black text-slate-400">
-        <div className="w-12 h-12 rounded-full border-2 border-sky-500 border-t-transparent animate-spin mb-4" />
-        <p className="text-sm font-medium">Carregando programação do cache local...</p>
+      <div className="relative w-full h-full flex flex-col items-center justify-center bg-[#07090e] text-slate-300">
+        <div className="absolute top-6 right-8 flex items-center space-x-3">
+          {showClock && (
+            <div className="flex items-center space-x-3 px-4 py-2 rounded-xl bg-black/50 border border-white/10 text-white">
+              <Clock className="w-4 h-4 text-sky-400" />
+              <div className="flex flex-col text-right">
+                <span className="text-sm font-bold font-mono tracking-wider">{currentTimeStr}</span>
+                <span className="text-[10px] text-slate-300 font-medium tracking-widest">{currentDateStr}</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-sky-500/30 bg-sky-500/10">
+          <Clock className="h-8 w-8 text-sky-400" />
+        </div>
+        <h1 className="text-xl font-semibold tracking-[0.18em] text-white">VITRION TV DISPLAY</h1>
+        <p className="mt-3 text-sm font-medium text-slate-300">FORA DO HORÁRIO PROGRAMADO</p>
+        <p className="mt-2 max-w-lg px-6 text-center text-xs leading-6 text-slate-500">
+          A reprodução será retomada automaticamente quando houver conteúdo ativo na programação.
+        </p>
       </div>
     );
   }
