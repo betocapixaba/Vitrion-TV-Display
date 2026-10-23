@@ -11,6 +11,8 @@ interface DisplayScreenProps {
   clockFormat?: '24h' | '12h';
   onItemEnded: () => void;
   onItemError: (itemId: string, errorMsg: string) => void;
+  initialPlaybackPositionSeconds?: number;
+  onPlaybackProgress?: (itemId: string, seconds: number) => void;
 }
 
 export const DisplayScreen: React.FC<DisplayScreenProps> = ({
@@ -20,6 +22,8 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
   clockFormat = '24h',
   onItemEnded,
   onItemError,
+  initialPlaybackPositionSeconds = 0,
+  onPlaybackProgress,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
@@ -227,6 +231,15 @@ export const DisplayScreen: React.FC<DisplayScreenProps> = ({
             playsInline
             onEnded={handleVideoEnded}
             onError={handleVideoError}
+            onLoadedMetadata={(event) => {
+              const video = event.currentTarget;
+              const resumeSeconds = Math.max(0, initialPlaybackPositionSeconds || 0);
+              if (resumeSeconds > 0) {
+                const maxSafePosition = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.5) : resumeSeconds;
+                video.currentTime = Math.min(resumeSeconds, maxSafePosition);
+              }
+            }}
+            onTimeUpdate={(event) => onPlaybackProgress?.(currentItem.id, event.currentTarget.currentTime)}
             className={`w-full h-full object-${currentItem.fitMode || 'cover'} bg-black`}
           />
         ) : (
