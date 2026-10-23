@@ -317,6 +317,27 @@ export default function App() {
     }
   }, [currentIndex, activeItems, playlist, device?.isActivated, isAdmin]);
 
+  // Reavalia a programação periodicamente para entrar/sair do standby sem reiniciar o app.
+  useEffect(() => {
+    if (isAdmin || !playlist || !device?.isActivated) return;
+
+    const refreshSchedule = () => {
+      const scheduledItems = getActivePlaylistItems(playlist);
+      setActiveItems((current) => {
+        const sameItems = current.length === scheduledItems.length &&
+          current.every((item, index) => item.id === scheduledItems[index]?.id);
+        if (sameItems) return current;
+        setCurrentIndex(0);
+        setResumePosition(null);
+        return scheduledItems;
+      });
+    };
+
+    refreshSchedule();
+    const interval = window.setInterval(refreshSchedule, 30000);
+    return () => window.clearInterval(interval);
+  }, [playlist, device?.isActivated, isAdmin]);
+
   // 3. Playback Timer Controller
   useEffect(() => {
     if (isAdmin || !device?.isActivated || activeItems.length === 0) return;
