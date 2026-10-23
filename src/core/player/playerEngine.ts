@@ -13,24 +13,28 @@ export function isItemActiveNow(schedule?: PlaybackSchedule): boolean {
 
   const now = new Date();
   const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday...
-
-  if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0) {
-    if (!schedule.daysOfWeek.includes(currentDay)) {
-      return false;
-    }
-  }
+  const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  const hasDayRestriction = !!schedule.daysOfWeek?.length;
+  const isAllowedDay = (day: number) => !hasDayRestriction || schedule.daysOfWeek!.includes(day);
 
   if (schedule.startTime && schedule.endTime) {
-    const currentHours = now.getHours().toString().padStart(2, '0');
-    const currentMinutes = now.getMinutes().toString().padStart(2, '0');
-    const currentTimeStr = `${currentHours}:${currentMinutes}`;
+    const isOvernightWindow = schedule.startTime > schedule.endTime;
+    const isInsideWindow = isOvernightWindow
+      ? currentTime >= schedule.startTime || currentTime <= schedule.endTime
+      : currentTime >= schedule.startTime && currentTime <= schedule.endTime;
 
-    if (currentTimeStr < schedule.startTime || currentTimeStr > schedule.endTime) {
-      return false;
+    if (!isInsideWindow) return false;
+
+    // For overnight windows after midnight, the schedule belongs to the previous day's start.
+    if (isOvernightWindow && currentTime <= schedule.endTime) {
+      const previousDay = (currentDay + 6) % 7;
+      return isAllowedDay(previousDay);
     }
+
+    return isAllowedDay(currentDay);
   }
 
-  return true;
+  return isAllowedDay(currentDay);
 }
 
 export function getActivePlaylistItems(playlist: Playlist): PlaylistItem[] {
